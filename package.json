@@ -1,0 +1,28 @@
+{
+  "name": "content-overflow",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "sync": "node scripts/sync-docs.mjs",
+    "dev": "npm run sync && astro dev",
+    "start": "npm run dev",
+    "build": "npm run sync && astro build && node scripts/check-links.mjs",
+    "build:only": "astro build",
+    "check:links": "node scripts/check-links.mjs",
+    "preview": "astro preview",
+    "check": "astro check",
+    "clean": "node scripts/sync-docs.mjs --clean",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.42.7",
+    "@expressive-code/plugin-line-numbers": "^0.44.3",
+    "astro": "^7.2.10",
+    "sharp": "^0.35.3"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.12",
+    "typescript": "^6.0.3"
+  }
+}

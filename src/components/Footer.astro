@@ -1,0 +1,52 @@
+---
+/**
+ * Starlight footer override.
+ *
+ * Every page on this site is mirrored from another repository, so the footer
+ * names the repository, branch and directory a page actually came from. The
+ * section is identified from the first URL segment, which the sync script
+ * guarantees is the source's `dest`.
+ */
+import Default from '@astrojs/starlight/components/Footer.astro';
+
+import { sources } from '../../docs.sources.mjs';
+import { base } from '../../site.config.mjs';
+
+const pathname = Astro.url.pathname;
+const relative = base && pathname.startsWith(base) ? pathname.slice(base.length) : pathname;
+const segment = relative.replace(/^\/+/, '').split('/')[0];
+
+const source = sources.find((candidate) => (candidate.dest ?? candidate.id) === segment);
+const directory = (source?.path ?? 'docs').replace(/^\.?\/*|\/*$/g, '');
+---
+
+{
+  source && (
+    <p class="source-origin">
+      Mirrored from{' '}
+      <a href={`https://github.com/${source.repo}`}>{source.repo}</a>
+      {' '}&middot; branch <code>{source.ref ?? 'main'}</code>
+      {directory && (
+        <>
+          {' '}&middot; <code>{directory}/</code>
+        </>
+      )}
+    </p>
+  )
+}
+
+<Default><slot /></Default>
+
+<style>
+  .source-origin {
+    margin-block: 1.5rem 0;
+    padding-block-start: 1rem;
+    border-block-start: 1px solid var(--sl-color-hairline);
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-3);
+  }
+
+  .source-origin code {
+    font-size: inherit;
+  }
+</style>

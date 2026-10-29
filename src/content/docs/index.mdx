@@ -1,0 +1,75 @@
+---
+title: Content Overflow
+description: Documentation gathered from across the Content Services repositories into one searchable site.
+template: splash
+# Without this the browser tab reads "Content Overflow | Content Overflow",
+# because Starlight appends the site title to every page title.
+head:
+  - tag: title
+    content: Content Overflow
+hero:
+  tagline: One searchable home for documentation that lives across many repositories.
+---
+
+import { Card, CardGrid, LinkButton, LinkCard } from '@astrojs/starlight/components';
+
+import manifest from '../../generated/sources.json';
+import { repositoryUrl } from '../../../site.config.mjs';
+
+{/*
+  Links come from the sync manifest rather than being written by hand, so they
+  already carry the site's base path and can only point at pages that exist.
+*/}
+
+<div>
+  {manifest.sources[0]?.pages[0] && (
+    <LinkButton href={manifest.sources[0].pages[0].url} icon="right-arrow">
+      Start with {manifest.sources[0].label}
+    </LinkButton>
+  )}
+  <LinkButton
+    href={repositoryUrl}
+    variant="minimal"
+    icon="external"
+  >
+    View on GitHub
+  </LinkButton>
+</div>
+
+## Documentation sources
+
+Every page here is mirrored from another repository at build time. Nothing is
+authored in this repository, so upstream stays the single place to make edits.
+
+<CardGrid>
+  {manifest.sources.map((source) => (
+    <Card title={source.label} icon="open-book">
+      <p>
+        {source.pageCount} page{source.pageCount === 1 ? '' : 's'} mirrored from{' '}
+        <a href={`https://github.com/${source.repo}/tree/${source.ref}/${source.path}`}>
+          {source.repo}
+        </a>
+        .
+      </p>
+      <ul>
+        {source.pages.slice(0, 5).map((page) => (
+          <li>
+            <a href={page.url}>{page.title}</a>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  ))}
+</CardGrid>
+
+## Adding another repository
+
+Add an entry to `docs.sources.mjs` naming the repository, the branch and the
+directory to pull from, then run `npm run sync`. The sidebar, this page and the
+ignore rules all follow from that one entry.
+
+<LinkCard
+  title="How the sync works"
+  description="Frontmatter injection, heading normalisation, link rewriting and asset handling, all in scripts/sync-docs.mjs."
+  href={`${repositoryUrl}#how-the-sync-works`}
+/>
