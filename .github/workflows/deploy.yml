@@ -32,6 +32,10 @@ jobs:
       - name: Configure GitHub Pages
         id: pages
         uses: actions/configure-pages@v5
+        with:
+          # Turns Pages on the first time this runs, so the repository needs no
+          # manual setup. Idempotent once Pages is already enabled.
+          enablement: true
 
       - name: Set up Node
         uses: actions/setup-node@v4
