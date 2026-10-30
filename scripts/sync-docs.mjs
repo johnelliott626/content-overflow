@@ -43,6 +43,7 @@ import { base } from '../site.config.mjs';
  * @property {string} repo
  * @property {string} [ref]
  * @property {string} [path]
+ * @property {boolean|string} [readme]
  * @property {string} [dest]
  * @property {number} [order]
  * @property {boolean} [collapsed]
@@ -158,10 +159,11 @@ async function syncSource(source, args) {
   const dest = destOf(source);
   const ref = source.ref ?? 'main';
   const docsPath = normaliseSourcePath(source.path ?? 'docs');
+  const readmePath = readmePathOf(source);
 
   console.log(`\nSyncing ${source.id} <- ${source.repo}@${ref}/${docsPath || '.'}`);
 
-  const repoDir = await fetchRepo(source, ref, docsPath, args.offline);
+  const repoDir = await fetchRepo(source, ref, sparseDirsFor(docsPath, readmePath), args.offline);
   const sha = await git(repoDir, ['rev-parse', 'HEAD']);
 
   const sourceRoot = docsPath ? path.join(repoDir, docsPath) : repoDir;
@@ -169,14 +171,14 @@ async function syncSource(source, args) {
     fail(`Path "${docsPath}" does not exist in ${source.repo}@${ref}`);
   }
 
-  const files = await collectFiles(sourceRoot, source);
-  if (files.length === 0) {
+  const inputs = await collectInputs(sourceRoot, repoDir, source, docsPath, readmePath, ref);
+  if (inputs.length === 0) {
     fail(`No documents found under "${docsPath}" in ${source.repo}@${ref}`);
   }
 
   // Map every input file to where it lands, before rewriting anything, so link
   // rewriting can see the final location of each target.
-  const plan = buildPlan(files, source, dest);
+  const plan = buildPlan(inputs, source, dest);
 
   const pagesOut = path.join(DOCS_DIR, dest);
   const assetsOut = path.join(ASSETS_DIR, dest);
@@ -189,7 +191,7 @@ async function syncSource(source, args) {
   const pageEntries = [...plan.entries.values()].filter((entry) => entry.kind === 'page');
   const rawByPath = new Map();
   for (const entry of pageEntries) {
-    rawByPath.set(entry.relPath, await fs.readFile(entry.absPath, 'utf8'));
+    rawByPath.set(entry.repoPath, await fs.readFile(entry.absPath, 'utf8'));
   }
 
   const embeds = source.embedCode === false
@@ -205,10 +207,10 @@ async function syncSource(source, args) {
       continue;
     }
 
-    const raw = rawByPath.get(entry.relPath);
-    const lastUpdated = await lastCommitDate(repoDir, posix.join(docsPath, entry.relPath));
+    const raw = rawByPath.get(entry.repoPath);
+    const lastUpdated = await lastCommitDate(repoDir, entry.repoPath);
 
-    const titleOverride = source.titles?.[entry.relPath] ?? null;
+    const titleOverride = source.titles?.[entry.key] ?? null;
 
     const rendered = renderPage(raw, {
       entry,
@@ -218,7 +220,6 @@ async function syncSource(source, args) {
       source,
       dest,
       ref,
-      docsPath,
       lastUpdated,
     });
 
@@ -272,7 +273,7 @@ function validateSource(source) {
 // git
 // ---------------------------------------------------------------------------
 
-async function fetchRepo(source, ref, docsPath, offline) {
+async function fetchRepo(source, ref, sparseDirs, offline) {
   const repoDir = path.join(CACHE_DIR, source.id);
   const url = remoteUrl(source);
   const alreadyCloned = await exists(path.join(repoDir, '.git'));
@@ -293,8 +294,8 @@ async function fetchRepo(source, ref, docsPath, offline) {
 
   await git(repoDir, ['remote', 'set-url', 'origin', url]);
 
-  if (docsPath) {
-    await git(repoDir, ['sparse-checkout', 'set', docsPath]);
+  if (sparseDirs.length > 0) {
+    await git(repoDir, ['sparse-checkout', 'set', ...sparseDirs]);
   } else {
     await git(repoDir, ['sparse-checkout', 'disable']);
   }
@@ -388,11 +389,63 @@ async function collectFiles(root, source) {
 }
 
 /**
+ * Everything this source publishes, as a flat list of inputs.
+ *
+ * A file's path inside the documentation directory and its path inside the
+ * repository are not the same thing, and a README pulled from the repository
+ * root has no documentation directory above it at all. Each input therefore
+ * carries three paths:
+ *
+ *   key        How the file is named in docs.sources.mjs, for `rename`,
+ *              `titles` and `pages` lookups.
+ *   repoPath   Where it lives in the repository, for commit dates, edit URLs
+ *              and resolving the relative links written inside it.
+ *   defaultOut Where it lands under the source's output directory, before any
+ *              `rename` is applied.
+ */
+async function collectInputs(sourceRoot, repoDir, source, docsPath, readmePath, ref) {
+  const files = await collectFiles(sourceRoot, source);
+
+  const inputs = files
+    .map((file) => ({
+      absPath: file.absPath,
+      kind: file.kind,
+      key: file.relPath,
+      repoPath: docsPath ? posix.join(docsPath, file.relPath) : file.relPath,
+      defaultOut: file.relPath,
+    }))
+    // A README that also sits inside the documentation directory is published
+    // once, by the entry added below.
+    .filter((input) => input.repoPath !== readmePath);
+
+  if (readmePath) {
+    const absPath = path.join(repoDir, readmePath);
+    if (!(await exists(absPath))) {
+      fail(`Source "${source.id}": readme "${readmePath}" does not exist in ${source.repo}@${ref}`);
+    }
+
+    // The repository's front page becomes the section's landing page, ahead of
+    // the documents it introduces.
+    inputs.unshift({
+      absPath,
+      kind: 'page',
+      key: readmePath,
+      repoPath: readmePath,
+      defaultOut: 'index.md',
+      defaultOrder: 0,
+      defaultTitle: 'README',
+    });
+  }
+
+  return inputs;
+}
+
+/**
  * Decide the output location and URL of every file up front.
  * Output paths are already slug-shaped, so the URL Astro derives from the file
  * path is exactly the URL computed here.
  */
-function buildPlan(files, source, dest) {
+function buildPlan(inputs, source, dest) {
   const entries = new Map();
   const order = new Map(
     (source.pages ?? []).map((slugPath, index) => [stripExtension(slugPath), index + 1]),
@@ -400,8 +453,8 @@ function buildPlan(files, source, dest) {
   const taken = new Map();
   const urls = new Map();
 
-  for (const file of files) {
-    const renamed = source.rename?.[file.relPath] ?? file.relPath;
+  for (const file of inputs) {
+    const renamed = source.rename?.[file.key] ?? file.defaultOut;
 
     let outRel;
     if (file.kind === 'page') {
@@ -414,11 +467,11 @@ function buildPlan(files, source, dest) {
     const clash = taken.get(`${file.kind}:${outRel}`);
     if (clash) {
       fail(
-        `Source "${source.id}": "${file.relPath}" and "${clash}" both map to "${outRel}". ` +
+        `Source "${source.id}": "${file.key}" and "${clash}" both map to "${outRel}". ` +
           'Use the "rename" option to disambiguate.',
       );
     }
-    taken.set(`${file.kind}:${outRel}`, file.relPath);
+    taken.set(`${file.kind}:${outRel}`, file.key);
 
     const entry = { ...file, outRel };
 
@@ -430,21 +483,24 @@ function buildPlan(files, source, dest) {
       entry.url = `${base}/${entry.slug}/`;
       entry.dir = outRel.split('/').slice(0, -1);
       entry.isIndex = posix.basename(outRel) === 'index.md';
-      entry.order = order.get(stripExtension(renamed)) ?? order.get(stripExtension(file.relPath)) ?? null;
+      entry.order = order.get(stripExtension(renamed))
+        ?? order.get(stripExtension(file.key))
+        ?? file.defaultOrder
+        ?? null;
 
       const urlClash = urls.get(entry.url);
       if (urlClash) {
         fail(
-          `Source "${source.id}": "${file.relPath}" and "${urlClash}" both publish to ` +
+          `Source "${source.id}": "${file.key}" and "${urlClash}" both publish to ` +
             `"${entry.url}". Use the "rename" option to disambiguate.`,
         );
       }
-      urls.set(entry.url, file.relPath);
+      urls.set(entry.url, file.key);
     } else {
       entry.url = `${base}/_assets/${dest}/${outRel}`;
     }
 
-    entries.set(file.relPath, entry);
+    entries.set(file.repoPath, entry);
   }
 
   return { entries };
@@ -515,7 +571,11 @@ function renderPage(raw, ctx) {
   body = restoreCode(linked, protectedBody.blocks).trim();
 
   const description = extractDescription(body);
-  const frontmatterTitle = title ?? titleFromFilename(ctx.entry.relPath);
+  // `defaultTitle` names the page without keeping its opening heading in the
+  // body, which is what a configured title means. An explicit `titles` entry
+  // still wins over both.
+  const frontmatterTitle =
+    ctx.titleOverride ?? ctx.entry.defaultTitle ?? title ?? titleFromFilename(ctx.entry.repoPath);
   const frontmatter = buildFrontmatter({
     existing,
     title: frontmatterTitle,
@@ -552,12 +612,24 @@ function protectCode(text) {
   );
   // A fence that is never closed still protects everything to the end of file.
   out = out.replace(/^[ \t]*(`{3,}|~{3,})[^\n]*\n[\s\S]*$/m, store);
-  out = out.replace(/(`+)(?:(?!\1)[\s\S])*?\1/g, store);
+  // A code span stops at a blank line, as it does in CommonMark. Without that
+  // limit a single stray backtick in prose swallows everything up to the next
+  // one, which can be most of the document.
+  out = out.replace(/(`+)(?:(?!\1)(?:[^\n]|\n(?![ \t]*\n)))*?\1/g, store);
   return { text: out, blocks };
 }
 
 function restoreCode(text, blocks) {
-  return text.replace(/\u0000CODE(\d+)\u0000/g, (_, index) => blocks[Number(index)]);
+  // A protected span can hold placeholders stored by an earlier pass, so one
+  // substitution can reveal more. Inner placeholders always have lower indices
+  // than the span holding them, which is what ends the loop.
+  let out = text;
+  while (out.includes('\u0000CODE')) {
+    const next = out.replace(/\u0000CODE(\d+)\u0000/g, (match, index) => blocks[Number(index)] ?? match);
+    if (next === out) break;
+    out = next;
+  }
+  return out;
 }
 
 function extractTitle(text) {
@@ -633,7 +705,7 @@ function titleFromFilename(relPath) {
 }
 
 function buildFrontmatter({ existing, title, description, ctx }) {
-  const { source, ref, docsPath, entry, lastUpdated } = ctx;
+  const { source, ref, entry, lastUpdated } = ctx;
   const existingKeys = new Set(
     (existing ?? '').split('\n')
       .map((line) => /^([A-Za-z0-9_-]+):/.exec(line)?.[1])
@@ -651,7 +723,7 @@ function buildFrontmatter({ existing, title, description, ctx }) {
 
   add('title', JSON.stringify(title));
   add('description', description === null ? null : JSON.stringify(description));
-  add('editUrl', `https://github.com/${source.repo}/blob/${ref}/${posix.join(docsPath, entry.relPath)}`);
+  add('editUrl', `https://github.com/${source.repo}/blob/${ref}/${entry.repoPath}`);
   add('lastUpdated', lastUpdated);
 
   if (entry.order !== null && !existingKeys.has('sidebar')) {
@@ -765,7 +837,7 @@ function embedPermalinks(text, ctx) {
       const end = endText ? Number(endText) : start;
 
       if (!Number.isFinite(start) || start < 1 || start > lines.length || end < start) {
-        console.warn(`  ! ${ctx.entry.relPath}: ${url} is out of range for the file`);
+        console.warn(`  ! ${ctx.entry.repoPath}: ${url} is out of range for the file`);
         return match;
       }
 
@@ -858,7 +930,7 @@ function resolveTarget(rawTarget, ctx, warnings) {
   const target = rawTarget.trim();
   if (!target) return null;
   if (target.startsWith('#')) return null;              // same-page anchor
-  if (target.startsWith('/')) return null;              // absolute or protocol-relative
+  if (target.startsWith('//')) return null;             // protocol-relative
   if (/^[a-z][a-z0-9+.-]*:/i.test(target)) return null; // http:, mailto:, ...
 
   const hashIndex = target.search(/[#?]/);
@@ -873,21 +945,34 @@ function resolveTarget(rawTarget, ctx, warnings) {
     decoded = filePart;
   }
 
-  const fromDir = posix.dirname(ctx.entry.relPath);
-  const resolved = posix.normalize(posix.join(fromDir === '.' ? '' : fromDir, decoded));
+  // Targets are resolved against the file's location in the repository, so a
+  // link reads the same whether it was written in docs/ or in a root README.
+  //
+  // A leading slash anchors to the repository root rather than to this site:
+  // the markdown was written for GitHub, where there is no site root to mean,
+  // and upstream authors use it for files "in this repo".
+  const fromDir = decoded.startsWith('/') ? '' : posix.dirname(ctx.entry.repoPath);
+  const resolved = posix.normalize(
+    posix.join(fromDir === '.' ? '' : fromDir, decoded.replace(/^\/+/, '')),
+  );
+
+  if (resolved.startsWith('..')) {
+    warnings.push(`${ctx.entry.repoPath}: link "${rawTarget}" escapes ${ctx.source.repo}; left unchanged`);
+    return null;
+  }
 
   // Published here, as either a page or a copied asset.
   const match = ctx.plan.entries.get(resolved);
   if (match) return `${match.url}${suffix}`;
 
   // Not published here: point at the file in the upstream repository instead.
-  const repoRelative = posix.normalize(posix.join(ctx.docsPath, fromDir === '.' ? '' : fromDir, decoded));
-  if (repoRelative.startsWith('..')) {
-    warnings.push(`${ctx.entry.relPath}: link "${rawTarget}" escapes ${ctx.source.repo}; left unchanged`);
-    return null;
-  }
+  // An image has to come from raw.githubusercontent.com, since the blob URL
+  // serves GitHub's HTML page rather than the file itself.
+  const host = ASSET_EXTENSIONS.has(posix.extname(resolved).toLowerCase())
+    ? `https://raw.githubusercontent.com/${ctx.source.repo}/${ctx.ref}`
+    : `https://github.com/${ctx.source.repo}/blob/${ctx.ref}`;
 
-  return `https://github.com/${ctx.source.repo}/blob/${ctx.ref}/${repoRelative}${suffix}`;
+  return `${host}/${resolved}${suffix}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -989,6 +1074,31 @@ async function updateGitignore(allSources) {
 
 function destOf(source) {
   return source.dest ?? source.id;
+}
+
+/** Repository-relative path of the README to publish, or null when disabled. */
+function readmePathOf(source) {
+  if (!source.readme) return null;
+  const configured = typeof source.readme === 'string' ? source.readme : 'README.md';
+  return normaliseSourcePath(configured);
+}
+
+/**
+ * Directories the sparse checkout has to materialise.
+ *
+ * Cone mode always checks out the files sitting at the repository root, so a
+ * root-level README needs no entry of its own here. An empty list means the
+ * whole repository is checked out.
+ */
+function sparseDirsFor(docsPath, readmePath) {
+  if (!docsPath) return [];
+
+  const dirs = new Set([docsPath]);
+  if (readmePath) {
+    const dir = posix.dirname(readmePath);
+    if (dir !== '.') dirs.add(dir);
+  }
+  return [...dirs];
 }
 
 function normaliseSourcePath(value) {

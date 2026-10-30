@@ -48,6 +48,7 @@ Add one entry to `docs.sources.mjs`:
   repo: 'content-services/content-sources-frontend',
   ref: 'main',
   path: 'docs',
+  readme: true,
   dest: 'content-sources-frontend',
   order: 2,
 }
@@ -61,6 +62,7 @@ Useful optional fields:
 
 | Field | Purpose |
 | --- | --- |
+| `readme` | Publish the repository README as the section's landing page; `true` for README.md at the root, or a path to another file |
 | `pages` | Ordered list of page paths; listed pages sort first in the sidebar |
 | `rename` | Map an upstream path to a different output path |
 | `exclude` | Glob patterns, relative to `path`, to skip |
@@ -81,7 +83,8 @@ renderer work as Starlight content.
 
 1. **Fetch.** Each source is cloned into `.cache/remote/<id>` with a blobless
    sparse clone, so only the docs directory is checked out while the full
-   commit history stays available for per-file dates.
+   commit history stays available for per-file dates. Files at the repository
+   root come along with it, which is how `readme` reaches them.
 2. **Plan.** Every input file is mapped to its output path before anything is
    written. Output paths are already slug-shaped, so the URL Astro derives from
    a file path is exactly the URL the script computed for it.
@@ -92,9 +95,12 @@ renderer work as Starlight content.
 4. **Headings.** The heading that became the title is removed. If a document
    still contains a level-one heading, every heading is demoted one level so it
    nests under the page title rather than competing with it.
-5. **Links.** Relative links between documents become real site URLs. Links to
-   files that are not published here, such as a repository's README or a
-   PlantUML source, become links to the upstream repository.
+5. **Links.** Relative links between documents become real site URLs. Targets
+   are resolved against the file's own location in the repository, so a link
+   reads the same whether it was written in `docs/` or in a root README, and a
+   leading slash means the repository root. Links to files that are not
+   published here, such as a PlantUML source, become links to the upstream
+   repository, through `raw.githubusercontent.com` for images.
 6. **Assets.** Images are copied into `public/_assets/<dest>/` and references
    are rewritten to match.
 7. **Permalinks.** A GitHub blob link with a line anchor, alone on its line,
