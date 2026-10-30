@@ -11,6 +11,10 @@
  *   repo      GitHub "owner/name". Used for clone, edit and fallback links.
  *   ref       Branch, tag or commit to read docs from.
  *   path      Directory inside the repo holding the docs ('.' for the root).
+ *   readme    Optional. Publish the repository's README as the landing page of
+ *             this section, ahead of the documents under `path`. `true` takes
+ *             README.md from the repository root; a string names another file.
+ *             Override its title through `titles`, keyed by that same path.
  *   dest      Directory under src/content/docs, and the first URL segment.
  *   order     Optional. Sidebar order of this group relative to other sources.
  *   collapsed Optional. Start the sidebar group collapsed. Defaults to false.
@@ -33,6 +37,7 @@ export const sources = [
     repo: 'content-services/content-sources-backend',
     ref: 'main',
     path: 'docs',
+    readme: true,
     dest: 'content-sources-backend',
     order: 1,
     titles: {
@@ -56,6 +61,7 @@ export const sources = [
     repo: 'content-services/content-sources-frontend',
     ref: 'main',
     path: 'docs',
+    readme: true,
     dest: 'content-sources-frontend',
     order: 2,
     rename: {
@@ -74,6 +80,7 @@ export const sources = [
     // The repository's docs/ also holds generated OpenAPI JSON and Go sources;
     // the prose lives one level down.
     path: 'docs/md',
+    readme: true,
     dest: 'patchman-engine',
     order: 3,
   },
@@ -83,6 +90,7 @@ export const sources = [
     repo: 'RedHatInsights/patchman-ui',
     ref: 'master',
     path: 'docs',
+    readme: true,
     dest: 'patchman-ui',
     order: 4,
     rename: {
