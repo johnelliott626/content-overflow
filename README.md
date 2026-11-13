@@ -4,8 +4,9 @@ A [Starlight](https://starlight.astro.build/) documentation site that gathers
 docs from several repositories into one searchable place, deployed to GitHub
 Pages.
 
-No documentation is authored here. Every page is pulled from a remote
-repository at build time, so upstream stays the single place to make edits.
+The General section is written in this repository, under
+`src/content/docs/general/`. Every other page is pulled from a remote
+repository at build time, so upstream stays the place to edit those pages.
 
 Current sources:
 
@@ -36,6 +37,19 @@ npm run dev      # syncs the remote docs, then serves on http://localhost:4321/c
 
 Add `--offline` to `npm run sync` to rebuild from the clone cache without
 fetching, and `--source=<id>` to sync a single repository.
+
+## Authoring general documentation
+
+Add a Markdown file to `src/content/docs/general/`. Starlight reads that
+directory directly, and the General sidebar group lists every page in it. A
+page needs a `title` in its frontmatter. The file name becomes the URL:
+`src/content/docs/general/writing-guidelines.md` is published at
+`/general/writing-guidelines/`.
+
+These files are committed. `npm run sync` only replaces the directories named
+by a remote source, so it leaves `general/` in place. Do not reuse a remote
+`dest` as the directory name, or the next sync will delete it and add it to
+`.gitignore`.
 
 ## Adding another repository
 

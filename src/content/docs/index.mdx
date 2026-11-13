@@ -14,7 +14,7 @@ hero:
 import { Card, CardGrid, LinkButton, LinkCard } from '@astrojs/starlight/components';
 
 import manifest from '../../generated/sources.json';
-import { repositoryUrl } from '../../../site.config.mjs';
+import { repositoryUrl, withBase } from '../../../site.config.mjs';
 
 {/*
   Links come from the sync manifest rather than being written by hand, so they
@@ -38,10 +38,19 @@ import { repositoryUrl } from '../../../site.config.mjs';
 
 ## Documentation sources
 
-Every page here is mirrored from another repository at build time. Nothing is
-authored in this repository, so upstream stays the single place to make edits.
+The General section is written in this repository. Every other section is
+mirrored from its own repository at build time, and edits to those pages belong
+upstream.
 
 <CardGrid>
+  <Card title="General" icon="open-book">
+    <p>Written in this repository.</p>
+    <ul>
+      <li>
+        <a href={withBase('/general/')}>Overview</a>
+      </li>
+    </ul>
+  </Card>
   {manifest.sources.map((source) => (
     <Card title={source.label} icon="open-book">
       <p>
