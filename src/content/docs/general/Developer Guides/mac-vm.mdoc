@@ -1,0 +1,104 @@
+---
+title: Development on Mac
+description: Guides for Content developers working on Mac.
+sidebar:
+  order: 1
+---
+
+Guides, tips, and tricks for those developing on a Mac.
+
+## How to run x86 RHEL VMs
+
+### 1. Initial UTM Set Up
+
+{% steps %}
+
+1. Install [UTM](https://getutm.app/) or some other hypervisor that allows for emulation (currently podman does not support this). If using Homebrew:
+
+   ```shell
+   brew install --cask utm
+   ```
+
+2. Create a new virtual machine in UTM. 
+
+   Select **Create a New Virtual Machine → Emulate → Other**
+
+3. On the Hardware screen:
+   - Machine: **x86_64**
+   - Set your hardware allocation
+
+4. On the Other screen:
+   - Boot Device: **None**
+   - Options: **UEFI Boot**
+
+5. Complete the remaining set up based on your preferences.
+
+{% /steps %}
+
+### 2. Create a RHEL Guest Image
+
+{% steps %}
+
+1. Go to Image Builder.
+
+   Select **Create image blueprint**
+
+2. Base settings:
+    - Architecture: **x86_64**
+    - Target environment: **Virtualization - Guest image (.qcow2)**
+    - Registration method: **Register later** (assuming you want to later register against local/stage)
+
+3. Advanced settings:
+
+    Create a user with admin privileges. A user with admin privileges is **required** later to register the system.
+
+4. Create blueprint and build images.
+
+5. Download the (.qcow2) image when the build completes.
+
+{% /steps %}
+
+### 3. Run the VM
+
+{% steps %}
+
+1. Import your guest image into UTM
+    - **Select your VM → Right click → Edit → Drives**
+
+2. Delete the default drive that is already there (named IDE Drive)
+
+3. Import your guest image into UTM 
+    - **New Drive → Import → Select you (.qcow2) image → Save**
+
+4. Start the VM! 
+
+{% /steps %}
+
+### 4. Register the VM
+
+
+{% tabs %}
+{% tabitem label="Stage" %}
+{% steps %}
+
+1. Configure `subscription-manager` and enter your stage credentials
+    ```shell
+    sudo subscription-manager clean
+    sudo subscription-manager config \
+      --server.hostname=subscription.rhsm.stage.redhat.com \
+      --server.port=443 \
+      --server.prefix=/subscription \
+      --server.insecure=0 \
+      --rhsm.baseurl=https://stagecdn.redhat.com/
+
+    sudo subscription-manager register
+    ``` 
+2. Register `insights-client`
+    ```shell
+    sudo insights-client --register
+    sudo insights-client --status
+    ```
+
+{% /steps %}
+{% /tabitem %}
+{% /tabs %}
