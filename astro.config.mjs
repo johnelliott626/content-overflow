@@ -35,7 +35,12 @@ export default defineConfig({
       sidebar: [
         {
           label: "General",
-          items: [{ autogenerate: { directory: "general" } }],
+          items: [{
+            autogenerate: {
+              directory: "general",
+              collapsed: true,
+            },
+          }],
         },
         ...remoteSections,
       ],

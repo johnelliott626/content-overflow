@@ -33,7 +33,12 @@ export function buildSidebar(sources) {
     return ordered.map((source) => ({
       label: source.label,
       collapsed: source.collapsed ?? false,
-      items: [{ autogenerate: { directory: source.dest ?? source.id } }],
+      items: [{
+        autogenerate: {
+          directory: source.dest ?? source.id,
+          collapsed: true,
+        },
+      }],
     }));
   }
 
@@ -93,11 +98,14 @@ function buildTree(pages, source) {
  * Groups and pages share one ordering, taken from the manifest: a group sits
  * where its earliest page sits, so a source's `pages` order controls the shape
  * of the whole tree rather than just the top level.
+ *
+ * Nested groups (second level and deeper under a source) start collapsed.
  */
 function flatten(node) {
   const groups = [...node.children.values()].map((child) => ({
     label: child.label,
     rank: child.rank,
+    collapsed: true,
     items: flatten(child),
   }));
 
