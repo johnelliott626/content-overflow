@@ -6,7 +6,6 @@ import { sources } from "./docs.sources.mjs";
 import { buildSidebar } from "./scripts/sidebar.mjs";
 import { base, repositoryUrl, site, siteName } from "./site.config.mjs";
 
-import markdoc from "@astrojs/markdoc";
 import starlightThemeNova from "starlight-theme-nova";
 
 // General is authored in this repository. Remote groups come from the sync
@@ -23,7 +22,6 @@ export default defineConfig({
       description:
         "Documentation gathered from across the Content Services repositories.",
       plugins: [starlightThemeNova()],
-      expressiveCode: true,
       favicon: "/favicon.svg",
       social: [
         {
@@ -52,6 +50,5 @@ export default defineConfig({
         Footer: "./src/components/Footer.astro",
       },
     }),
-    markdoc(),
   ],
 });

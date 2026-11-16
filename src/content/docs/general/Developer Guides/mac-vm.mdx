@@ -1,0 +1,208 @@
+---
+title: Development on Mac
+description: Guides for Content developers working on Mac.
+sidebar:
+  order: 1
+---
+
+import { Aside, Steps, Tabs, TabItem } from "@astrojs/starlight/components";
+
+Guides, tips, and tricks for those developing on a Mac.
+
+## How to run x86 RHEL VMs
+
+### 1. Initial UTM Set Up
+
+<Steps>
+
+1. Install [UTM](https://getutm.app/) or some other hypervisor that allows for emulation (currently podman does not support this). If using Homebrew:
+
+   ```shell
+   brew install --cask utm
+   ```
+
+2. Create a new virtual machine in UTM.
+
+   Select **Create a New Virtual Machine → Emulate → Other**
+
+3. On the Hardware screen:
+   - Machine: **x86_64**
+   - Set your hardware allocation
+
+4. On the Other screen:
+   - Boot Device: **None**
+   - Options: **UEFI Boot**
+
+5. Complete the remaining set up based on your preferences.
+
+</Steps>
+
+### 2. Create a RHEL Guest Image
+
+<Steps>
+
+1. Go to Image Builder.
+
+   Select **Create image blueprint**
+
+2. Base settings:
+   - Architecture: **x86_64**
+   - Target environment: **Virtualization - Guest image (.qcow2)**
+   - Registration method: **Register later** (assuming you want to later register against local/stage)
+
+3. Advanced settings:
+
+   Create a user with admin privileges. A user with admin privileges is **required** later to register the system.
+
+4. Create blueprint and build images.
+
+5. Download the (.qcow2) image when the build completes.
+
+</Steps>
+
+### 3. Run the VM
+
+<Steps>
+
+1. Import your guest image into UTM
+   - **Select your VM → Right click → Edit → Drives**
+
+2. Delete the default drive that is already there (named IDE Drive)
+
+3. Import your guest image into UTM
+   - **New Drive → Import → Select you (.qcow2) image → Save**
+
+4. Start the VM!
+
+</Steps>
+
+### 4. Register the VM
+
+<Tabs>
+   <TabItem label="Local">
+      #### Configure subscription manager 
+      <Steps>
+
+         1. On the VM, map your Mac's IP to `pulp.content`
+            ```shell
+            sudo sh -c 'echo "192.168.64.1 pulp.content" >> /etc/hosts'
+            ```
+         2. Configure and register `subscription-manager` with you local pulp instance and fetch the system id
+
+            Username: `admin`
+
+            Password: `admin`
+            ```shell
+            sudo subscription-manager config \
+               --server.hostname=pulp.content \
+               --server.port=8444 \
+               --server.prefix=/candlepin \
+               --server.insecure=1
+
+            sudo subscription-manager register
+            sudo subscription-manager identity
+            ```
+      </Steps>
+
+      #### Assign a template to the system and test pulling content from a specific repository
+      <Steps>
+         1. On your Mac, in `content-sources-backend` assign a template to your system
+
+            ```shell
+            go run cmd/candlepin/main.go add-system  $SYSTEM_IDENTITY $TEMPLATE_NAME 
+            ```
+         2. On your VM, refresh `subscription-manager`
+
+            ```shell
+            sudo subscription-manager refresh
+            ```
+         3. List available repositories
+
+            ```shell
+            yum repolist all
+            ```
+         4. Verify connectivity with the repositoy being tested
+
+            ```shell
+            REPO_ID=
+            ```
+
+            ```shell
+            sudo yum clean all --disablerepo="*" --enablerepo="$REPO_ID"
+            sudo yum makecache --disablerepo="*" --enablerepo="$REPO_ID"
+            ```
+         5. View any package in the reposiotory and test downloading it
+
+            ```shell
+            yum --disablerepo="*" --enablerepo="$REPO_ID" list available | head -n 10
+            ```
+            ```shell
+            sudo yum download --disablerepo="*" --enablerepo="$REPO_ID" <package-name>
+            ```
+
+      </Steps>
+
+   </TabItem>
+
+   <TabItem label="Stage">
+      <Aside>Ensure you are connected to the corporate VPN before completing the following steps.</Aside>
+      #### Configure subscription manager
+      <Steps>
+
+      1. Configure and register `subscription-manager` and enter your stage credentials
+
+         ```shell
+         sudo subscription-manager clean
+         sudo subscription-manager config \
+            --server.hostname=subscription.rhsm.stage.redhat.com \
+            --server.port=443 \
+            --server.prefix=/subscription \
+            --server.insecure=0 \
+            --rhsm.baseurl=https://stagecdn.redhat.com/
+
+         sudo subscription-manager register
+         ```
+      2. Register `insights-client`
+
+         ```shell
+         sudo insights-client --register
+         sudo insights-client --status
+         ```
+
+      </Steps>
+
+      #### Assign a template to the system and test pulling content from a specific repository
+      <Steps>
+      1. In the Content Sources stage UI assign a template to your system
+      2. On your VM, refresh `subscription-manager`
+
+         ```shell
+         sudo subscription-manager refresh
+         ```
+      3. List available repositories
+
+         ```shell
+         yum repolist all
+         ```
+      4. Verify connectivity with the repositoy being tested
+
+         ```shell
+         REPO_ID=
+         ```
+
+         ```shell
+         sudo yum clean all --disablerepo="*" --enablerepo="$REPO_ID"
+         sudo yum makecache --disablerepo="*" --enablerepo="$REPO_ID"
+         ```
+      5. View any package in the reposiotory and test downloading it
+
+         ```shell
+         yum --disablerepo="*" --enablerepo="$REPO_ID" list available | head -n 10
+         ```
+         ```shell
+         sudo yum download --disablerepo="*" --enablerepo="$REPO_ID" <package-name>
+         ```
+      </Steps>
+
+   </TabItem>
+</Tabs>
