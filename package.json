@@ -21,7 +21,8 @@
     "@astrojs/starlight-markdoc": "^0.7.0",
     "@expressive-code/plugin-line-numbers": "^0.44.3",
     "astro": "^7.2.10",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.3",
+    "starlight-theme-nova": "^0.12.3"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.12",
